@@ -41,14 +41,10 @@ STANDARD_MASTER_SEQUENCE = ["TGTNR", "BPNR", "TGTR", "TGTXR", "LCPR", "TCFR", "B
 class FullUFSBIAnalyzer:
     def parse_excel_log(self, file_obj):
         try:
-            if file_obj.name.endswith('.xls'):
-                df = pd.read_excel(file_obj, engine='xlrd')
-            else:
-                df = pd.read_excel(file_obj, engine='openpyxl')
-                
+            # 1. ऑटोमैटिक रीडर: यह खुद ही फाइल का असली फॉर्मेट पहचान लेगा
+            df = pd.read_excel(file_obj, engine=None)
             df.columns = [str(col).strip().upper() for col in df.columns]
             
-            # Find relevant column mappings dynamically
             t_col = next((c for c in df.columns if "TIME" in c or "DATE" in c), df.columns[0])
             r_col = next((c for c in df.columns if "RELAY" in c or "DESC" in c or "NAME" in c or "EQUIP" in c), df.columns[1])
             s_col = next((c for c in df.columns if "STAT" in c or "STATE" in c or "VAL" in c), df.columns[2])
@@ -59,7 +55,6 @@ class FullUFSBIAnalyzer:
                 stat_str = str(r[s_col]).upper()
                 time_str = str(r[t_col])
                 
-                # Check against our 29+ element master dictionary
                 matched_key = None
                 for k in EXTENDED_RELAY_DB.keys():
                     if k in val_str:
@@ -74,13 +69,35 @@ class FullUFSBIAnalyzer:
                     })
             return parsed_rows, df
         except Exception as e:
-            st.error(f"Error reading telemetry spreadsheet: {str(e)}")
-            return None, None
+            # 2. बैकअप रीडर (अगर पहला इंजन फेल हो तो)
+            try:
+                df = pd.read_excel(file_obj, engine='openpyxl')
+                df.columns = [str(col).strip().upper() for col in df.columns]
+                t_col = next((c for c in df.columns if "TIME" in c or "DATE" in c), df.columns[0])
+                r_col = next((c for c in df.columns if "RELAY" in c or "DESC" in c or "NAME" in c or "EQUIP" in c), df.columns[1])
+                s_col = next((c for c in df.columns if "STAT" in c or "STATE" in c or "VAL" in c), df.columns[2])
+                
+                parsed_rows = []
+                for _, r in df.iterrows():
+                    val_str = str(r[r_col]).upper()
+                    stat_str = str(r[s_col]).upper()
+                    time_str = str(r[t_col])
+                    matched_key = None
+                    for k in EXTENDED_RELAY_DB.keys():
+                        if k in val_str:
+                            matched_key = k
+                            break
+                    if matched_key:
+                        parsed_rows.append({"time": time_str, "key": matched_key, "status": stat_str})
+                return parsed_rows, df
+            except Exception as e2:
+                st.error(f"Error reading telemetry spreadsheet: {str(e2)}")
+                return None, None
 
     def evaluate_system_health(self, rows, raw_df):
-        # 1. CHECK FOR LINK FAILURE / MODEM ERRS FIRST
         raw_text_dump = raw_df.to_string().upper()
         
+        # 1. CHECK FOR LINK FAILURE / MODEM ERRS
         if "LINK FAIL" in raw_text_dump or "COMMUNICATION FAIL" in raw_text_dump or "MODEM ERR" in raw_text_dump:
             return {
                 "category": "LINK_FAILURE",
