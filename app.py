@@ -3,151 +3,74 @@ import sys
 import pandas as pd
 
 # ==============================================================================
-# 1. REAL-WORLD INTERLOCKING RELAY CONTACT GRID (S&T Wiring Sheet Standard)
+# 1. CORE UFSBI CABINET RELAY MAPPING (Pure Data Logger Input Parameters)
 # ==============================================================================
 RELAY_DB = {
-    "SMKPR": {
-        "function": "Station Master Key Proving Relay (Pre-Initiation Check)",
-        "expected_after": "Power ON",
-        "probable_cause": "SM Key is physically OUT, or Panel Key Contact has heavy carbon / open circuit",
+    "LINK_FAIL": {
+        "function": "UFSBI Inter-Station Line Communication Link",
+        "probable_cause": "🚨 CRITICAL LINK FAILURE! OFC Cable Core Cut, High Line Attenuation (>30dB), or Deltron Rx/Tx Card failure.",
         "feed_path": [
-            {"relay": "SM_PANEL_KEY", "contact": "Band-1 & Band-2", "type": "Physical Key Switch Contacts"},
-            {"unit": "Go to Plexiglass Panel Terminal Row-A: Check Fuse No. F1 (Pnl)"}
+            {"unit": "Go to Deltron Cabinet CPU Card: Check if 'LINK FAIL' LED or Error Code 33 is flashing."},
+            {"unit": "Go to OFC MUX / Quad Cable Termination Box: Measure optical power dB loss."},
+            {"unit": "Verify adjacent station's UFSBI is not completely powered OFF."}
         ]
     },
-    "SNR": {
-        "function": "Signal Normal Proving Relay (Pre-Initiation Safety)",
-        "expected_after": "SMKPR",
-        "probable_cause": "Yard Signal Knob reversed, or Home/LSS Signal Aspect Lamp Fused / Bobbing",
+    "POWER_FAIL": {
+        "function": "UFSBI Internal Vital Power Proving (BIPR1/BIPR2 Drop)",
+        "probable_cause": "⚡ CABINET POWER SUPPLY FAULT! Main 24V DC input dropped below operational limits (<21.6V) or DC-DC Converter blown.",
         "feed_path": [
-            {"relay": "ASCR / HSCR", "contact": "A1 & A2", "type": "Back Contacts (Signal ON Proving)"},
-            {"unit": "Go to Relay Rack No. 3, Cable Termination Board (CTB): Test Terminal 12"}
-        ]
-    },
-    "ASR": {
-        "function": "Approach Locking Proving Relay (Pre-Initiation Safety)",
-        "expected_after": "SNR",
-        "probable_cause": "LSS Track Circuit / Advanced Starter Approach Track down or chattering",
-        "feed_path": [
-            {"relay": "FSTR (First Stop Track)", "contact": "A1 & A2", "type": "Front Contacts"},
-            {"unit": "Go to Track Relay Cabinet: Test Terminal Row-C for incoming track voltage"}
-        ]
-    },
-    "BIPR1": {
-        "function": "UFSBI Vital System Health Relay 1",
-        "expected_after": "ASR",
-        "probable_cause": "Power input failure at UFSBI Dashboard or Internal DC-DC Converter output < 21.6V",
-        "feed_path": [
-            {"unit": "Go to Deltron Cabinet Sub-Rack 1: Check Power Supply Module Card-1 Output"},
-            {"unit": "Go to Cabinet Terminal Block TB-1: Measure Voltage at Pins 5 & 6"}
-        ]
-    },
-    "BIPR2": {
-        "function": "UFSBI Vital System Health Relay 2",
-        "expected_after": "BIPR1",
-        "probable_cause": "System Hardware Code Trip (Phase Latch Lock) or Power input drop below 19V",
-        "feed_path": [
-            {"unit": "Go to Deltron Cabinet Sub-Rack 1: Check Power Supply Module Card-2 Output"},
-            {"unit": "Go to Cabinet Terminal Block TB-1: Measure Voltage at Pins 7 & 8"}
+            {"unit": "Go to Deltron Cabinet TB-1 (Terminal Block): Measure Voltage across Pins 5 & 6 (BIPR1) and Pins 7 & 8 (BIPR2)."},
+            {"unit": "Check Sub-Rack Power Supply Module Module Card-1 & Card-2 status LEDs."},
+            {"unit": "Check 2A/4A Glass Fuse on the power distribution panel."}
         ]
     },
     "TGTNR": {
         "function": "Train Going To Normal Relay",
-        "expected_after": "BIPR2",
-        "probable_cause": "Block Instrument not in Line Closed state or LCZR back contact open",
+        "probable_cause": "🔑 BLOCK OPERATION BLOCKED / KEY ISSUE! Block Instrument is not in 'Line Closed' state, or local LCB Key/SM Key contact is open.",
         "feed_path": [
-            {"relay": "LCZR", "contact": "C3 & C4", "type": "Back Contacts"},
-            {"unit": "Go to Block Rack Layout: Test Binding Post Terminal 4B"}
+            {"relay": "LCZR (Line Closed Proving Relay)", "contact": "C3 & C4", "type": "Back Contacts"},
+            {"relay": "SM_PANEL_KEY_SWITCH", "contact": "Band-1 & Band-2", "type": "Physical Key Contacts"},
+            {"unit": "Go to SM Panel Board Jumper Grid Row-A: Verify Fuse No. F1 (Pnl) is intact."}
         ]
     },
     "BPNR": {
         "function": "Block Button Proving Normal Relay",
-        "expected_after": "TGTNR",
-        "probable_cause": "Bell Plunger or TGB/TCB Button stuck in pressed position / Defective Contact",
+        "probable_cause": "🔘 BUTTON STUCK FAULT! Bell Plunger, TGB, or TCB button is physically stuck in pressed position or carboned.",
         "feed_path": [
-            {"relay": "BELL_PLUNGER_SWITCH", "contact": "Back-Band", "type": "Push Button Contacts"},
-            {"unit": "Go to SM Panel Jumper Grid: Test Row-B, Pin 3 for stuck contact"}
+            {"relay": "BELL_PLUNGER / PUSH_BUTTON", "contact": "Back-Band contacts", "type": "Normally Closed Switch"},
+            {"unit": "Go to SM Panel Jumper Grid Row-B: Check Pin 3 for short circuit / terminal shorting."}
         ]
     },
     "TGTR": {
-        "function": "Train Going To Control Relay",
-        "expected_after": "BPNR",
-        "probable_cause": "Line Clear Initiation Failure or Bell Button Contact Defective",
+        "function": "Train Going To Control Relay (Line Clear Granted Lock)",
+        "probable_cause": "❌ LINE CLEAR INITIATION FAIL! Circuit discontinuity in handshake parameters or open contact in local initiation loop.",
         "feed_path": [
             {"relay": "TGTXR", "contact": "A4 & A5", "type": "Front Contacts"},
             {"relay": "BPNR", "contact": "C1 & C2", "type": "Front Contacts"},
-            {"unit": "Go to TGTR Relay Base: Check Coil Terminal Wire Interconnections for loose solder"}
-        ]
-    },
-    "TGTXR": {
-        "function": "Train Going To Extension Relay",
-        "expected_after": "TGTR",
-        "probable_cause": "Circuit Handshake interruption or Link Fail between Dashboard & Cabinet",
-        "feed_path": [
-            {"relay": "TGTR", "contact": "A1 & A2", "type": "Front Contacts"},
-            {"unit": "Go to Deltron Rack: Check UFSBI Digital Output Card connection to TGTXR Coil Input"}
+            {"unit": "Go to TGTR Relay Q-Style Base: Check Coil Terminals for loose wire or dry solder."}
         ]
     },
     "TCFR": {
-        "function": "Train Coming From Control Relay",
-        "expected_after": "TGTXR",
-        "probable_cause": "Communication Receive (Rx) Path Failure / Quad Cable Core Cut / High Attenuation",
+        "function": "Train Coming From Control Relay (Line Clear Received)",
+        "expected_after": "TGTR",
+        "probable_cause": "📡 HANDSHAKE RESPONSE FAILURE! Local cabinet received the demand but failed to latch due to internal relay dependency drop.",
         "feed_path": [
             {"relay": "BIPR1", "contact": "A4 & A5", "type": "Front Contacts"},
             {"relay": "BIPR2", "contact": "D1 & D2", "type": "Front Contacts"},
-            {"relay": "TGTR", "contact": "B3 & B4", "type": "Front Contacts"},
-            {"unit": "Go to UFSBI Output Card: Test Terminal Row-E for active Rx output voltage"}
-        ]
-    },
-    "BTSR": {
-        "function": "Block Tension Signal Relay",
-        "expected_after": "TCFR",
-        "probable_cause": "Line clear acknowledgement fail from adjacent station",
-        "feed_path": [
-            {"relay": "TCFR", "contact": "B1 & B2", "type": "Front Contacts"},
-            {"unit": "Go to Interlocking Rack Fuse Board: Check Fuse F5"}
-        ]
-    },
-    "HSATPR": {
-        "function": "Home Signal Approach Track Proving Relay",
-        "expected_after": "BTSR",
-        "probable_cause": "Train entry sequence failure or track circuit parameters unfulfilled",
-        "feed_path": [
-            {"relay": "BER_TR (Track Relay)", "contact": "C3 & C4", "type": "Front Contacts"},
-            {"unit": "Go to Relay Room Terminal Block: Test TB-Home for drop in feed"}
-        ]
-    },
-    "TAR1": {
-        "function": "Time Arrival Relay 1 (Track Sequence Proving)",
-        "expected_after": "HSATPR",
-        "probable_cause": "Home Signal Replacement Sequence Fault or Axle Counter Reset Issue",
-        "feed_path": [
-            {"relay": "BTSR", "contact": "D1 & D2", "type": "Front Contacts"},
-            {"relay": "HSATPR", "contact": "A1 & A2", "type": "Back Contacts"},
-            {"unit": "Go to TAR1 Relay Base: Check Coil Terminal Base Binding Post for voltage"}
-        ]
-    },
-    "TAR2": {
-        "function": "Time Arrival Relay 2 (Complete Arrival Verification)",
-        "expected_after": "TAR1",
-        "probable_cause": "Arrival Sequence Timed-out or Interlocking Verification Parameters Unfulfilled",
-        "feed_path": [
-            {"relay": "TAR1", "contact": "A1 & A2", "type": "Front Contacts"},
-            {"relay": "AZTR-R", "contact": "B3 & B4", "type": "Front Contacts"},
-            {"relay": "FR1", "contact": "C1 & C2", "type": "Flashing Contacts"},
-            {"unit": "Go to TAR2 Relay Base: Check Coil Terminal Connectors for proper seating"}
+            {"relay": "TGTR", "contact": "B3 & B4", "type": "Front Contacts"}
         ]
     }
 }
 
-STANDARD_SEQUENCE = ["SMKPR", "SNR", "ASR", "BIPR1", "BIPR2", "TGTNR", "BPNR", "TGTR", "TGTXR", "TCFR", "BTSR", "HSATPR", "TAR1", "TAR2"]
+# Criss-Cross Execution Sequence
+CRITICAL_CHECKPOINTS = ["BIPR1", "BIPR2", "TGTNR", "BPNR", "TGTR", "TCFR"]
 
 class RealWorldUFSBIAnalyzer:
     def sanitize_relay_name(self, cell_value):
         if pd.isna(cell_value):
             return ""
         cell_str = str(cell_value).upper()
-        for relay in STANDARD_SEQUENCE:
+        for relay in CRITICAL_CHECKPOINTS:
             if relay in cell_str:
                 return relay
         return ""
@@ -165,6 +88,11 @@ class RealWorldUFSBIAnalyzer:
             if not relay_col: relay_col = df.columns[1]
             if not status_col: status_col = df.columns[2]
             
+            # Sort chronologically by time to read state immediately BEFORE failure
+            df = df.dropna(subset=[time_col, relay_col, status_col])
+            df[time_col] = pd.to_datetime(df[time_col], errors='coerce')
+            df = df.sort_values(by=time_col).reset_index(drop=True)
+            
             cleaned_events = []
             for _, row in df.iterrows():
                 relay_name = self.sanitize_relay_name(row[relay_col])
@@ -180,111 +108,111 @@ class RealWorldUFSBIAnalyzer:
 
     def analyze_sequence(self, events):
         if not events:
-            return {"status": "NO_DATA", "message": "Zero active UFSBI transitions found in log."}
+            return {"status": "NO_DATA", "message": "Zero UFSBI data points found in data logger sheet."}
 
-        picked_relays = set()
-        last_healthy_relay = None
-        missing_relay = None
+        # Extract latest states of vital relays
+        states = {r: "DOWN" for r in CRITICAL_CHECKPOINTS}
+        for e in events:
+            if any(x in e['status'] for x in ['ON', 'PICK', 'UP', '1', 'REVERS']):
+                states[e['relay']] = "UP"
+            elif any(x in e['status'] for x in ['OFF', 'DROP', 'DOWN', '0', 'NORMAL']):
+                states[e['relay']] = "DOWN"
 
-        for relay in STANDARD_SEQUENCE:
-            is_picked = any(
-                e['relay'] == relay and 
-                any(x in e['status'] for x in ['ON', 'PICK', 'UP', '1', 'REVERS']) 
-                for e in events
-            )
-            if is_picked:
-                picked_relays.add(relay)
-                last_healthy_relay = relay
-            else:
-                missing_relay = relay
-                break
+        # ----------------==================================================
+        # PRIORITY GATE 1: CHECK LINK AND SYSTEM POWER FIRST (BIPR1 & BIPR2)
+        # ----------------==================================================
+        if states["BIPR1"] == "DOWN" and states["BIPR2"] == "DOWN":
+            return {
+                "status": "FAILURE",
+                "missing_relay": "LINK FAILURE / LINE INTERREUPTION",
+                "type": "LINK",
+                "root_cause_details": RELAY_DB["LINK_FAIL"]
+            }
+        
+        if states["BIPR1"] == "DOWN" or states["BIPR2"] == "DOWN":
+            return {
+                "status": "FAILURE",
+                "missing_relay": "BIPR1 / BIPR2 (Power Input Drop)",
+                "type": "POWER",
+                "root_cause_details": RELAY_DB["POWER_FAIL"]
+            }
 
-        if not missing_relay:
-            return {"status": "HEALTHY", "message": "All signaling relays picked up in proper operational sequence."}
+        # ----------------==================================================
+        # PRIORITY GATE 2: CHECK KEYS AND BUTTONS ONLY IF LINK/POWER IS OK
+        # ----------------==================================================
+        if states["TGTNR"] == "DOWN":
+            return {
+                "status": "FAILURE",
+                "missing_relay": "TGTNR",
+                "type": "OPERATION",
+                "root_cause_details": RELAY_DB["TGTNR"]
+            }
 
-        return {
-            "status": "FAILURE",
-            "missing_relay": missing_relay,
-            "last_healthy": last_healthy_relay,
-            "root_cause_details": RELAY_DB.get(missing_relay, None)
-        }
+        if states["BPNR"] == "DOWN":
+            return {
+                "status": "FAILURE",
+                "missing_relay": "BPNR",
+                "type": "OPERATION",
+                "root_cause_details": RELAY_DB["BPNR"]
+            }
+
+        if states["TGTR"] == "DOWN":
+            return {
+                "status": "FAILURE",
+                "missing_relay": "TGTR",
+                "type": "OPERATION",
+                "root_cause_details": RELAY_DB["TGTR"]
+            }
+
+        if states["TCFR"] == "DOWN":
+            return {
+                "status": "FAILURE",
+                "missing_relay": "TCFR",
+                "type": "OPERATION",
+                "root_cause_details": RELAY_DB["TCFR"]
+            }
+
+        return {"status": "HEALTHY", "message": "All monitored UFSBI cabinet circuits working in perfect parameters."}
 
 # ==============================================================================
-# 5. UNIVERSAL RUNTIME INTERFACE (FOR PC CMD AND ANDROID WEB LINK)
+# 5. UNIVERSAL Streamlit Android UI & PC CLI Framework
 # ==============================================================================
 if __name__ == "__main__":
     analyzer = RealWorldUFSBIAnalyzer()
-    
-    # Check if running in Streamlit Mobile/Web environment
     try:
         import streamlit as st
-        
-        st.markdown("## 📡 UFSBI Master Diagnostic & Fault Isolation Engine")
-        st.markdown("### **S&T Department - Northeast Frontier Railway**")
+        st.set_page_config(page_title="UFSBI Diagnostic Engine", layout="wide")
+        st.markdown("## 📡 Advanced UFSBI Diagnostic Engine (Priority-Scan Mode)")
+        st.markdown("### **S&T Department — Northeast Frontier Railway**")
         st.markdown("---")
         
-        uploaded_file = st.file_uploader("📥 Upload Station Data Logger Excel File (.xls/.xlsx)", type=["xls", "xlsx"])
-        
+        uploaded_file = st.file_uploader("📥 Upload Station Data Logger Excel File", type=["xls", "xlsx"])
         if uploaded_file is not None:
             import tempfile
             with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp_file:
                 tmp_file.write(uploaded_file.getvalue())
                 tmp_path = tmp_file.name
             
-            log_events = analyzer.load_railway_logger(tmp_path)
-            results = analyzer.analyze_sequence(log_events)
+            events = analyzer.load_railway_logger(tmp_path)
+            res = analyzer.analyze_sequence(events)
             
-            st.markdown(f"### 📋 ROOT CAUSE ANALYSIS FOR: `{uploaded_file.name}`")
-            st.markdown("---")
-            
-            if results["status"] == "HEALTHY":
-                st.success(f"🟢 **DIAGNOSTIC STATUS: SYSTEM HEALTHY**\n\n{results['message']}")
-            elif results["status"] == "NO_DATA":
-                st.warning(f"⚠️ {results['message']}")
+            st.markdown(f"### 📋 RECTIFICATION REPORT FOR: `{uploaded_file.name}`")
+            if res["status"] == "HEALTHY":
+                st.success(res["message"])
+            elif res["status"] == "NO_DATA":
+                st.warning(res["message"])
             else:
-                missing = results["missing_relay"]
-                last_healthy = results["last_healthy"]
-                details = results["root_cause_details"]
+                details = res["root_cause_details"]
+                st.error(f"🚨 **CRITICAL BREAK POINT: {res['missing_relay']}**")
+                st.info(f"ℹ️ **Isolating Cause:** {details['probable_cause']}")
+                st.markdown("#### 🛠️ **FIELD INVESTIGATION PATH (STEP-BY-STEP):**")
                 
-                st.error(f"🚨 **BREAK POINT IDENTIFIED : [ {missing} ] Relay Failed to Pick Up**")
-                st.info(f"⏱️ **LAST VALID SEQUENT STATE: [ {last_healthy if last_healthy else 'None (Power ON Phase)'} ]**")
-                
-                if details:
-                    st.markdown(f"**Circuit Block Function :** {details['function']}")
-                    st.markdown(f"**Isolating Root Cause   :** {details['probable_cause']}")
-                    st.markdown("---")
-                    st.markdown("### 🛠️ **WIRING FEED PATH PHYSICAL CHECKPOINTS**")
-                    st.markdown("*(Isolate circuitry failures by measuring contact voltage drops sequentially at specified terminals)*")
-                    
-                    for idx, path in enumerate(details["feed_path"], 1):
-                        if "relay" in path:
-                            st.info(f"📍 **[{idx}] Check AT RELAY:** [ **{path['relay']}** ]\n* **Measure at Terminal Pins:** `{path['contact']}`\n* **Contact Type:** {path['type']}")
-                        else:
-                            st.error(f"⚡ **[{idx}] Check Physical Unit:** {path['unit']}")
-                else:
-                    st.write("Description: Relay sequence dropped unexpectedly.")
-            os.unlink(tmp_path)
-
-    except ImportError:
-        # Fallback to local PC Command Prompt Execution Mode
-        workspace_folder = "."
-        all_files = os.listdir(workspace_folder)
-        excel_files = [f for f in all_files if f.endswith(('.xls', '.xlsx'))]
-        
-        if excel_files:
-            selected_file = excel_files[0]
-            log_events = analyzer.load_railway_logger(os.path.join(workspace_folder, selected_file))
-            results = analyzer.analyze_sequence(log_events)
-            
-            print(f"\n===========================================================================")
-            print(f"BREAK POINT IDENTIFIED : [ {results.get('missing_relay')} ] Relay Failed to Pick Up")
-            details = results.get('root_cause_details')
-            if details:
-                print(f"Isolating Root Cause   : {details['probable_cause']}\n")
-                print("------------- WIRING FEED PATH PHYSICAL CHECKPOINTS -------------")
-                for idx, path in enumerate(details["feed_path"], 1):
-                    if "relay" in path:
-                        print(f" [{idx}] Check AT RELAY: [ {path['relay']} ] -> Pins: {path['contact']} ({path['type']})")
+                for idx, p in enumerate(details["feed_path"], 1):
+                    if "relay" in p:
+                        st.warning(f"📍 **[{idx}] Check AT RELAY:** [ **{p['relay']}** ] $\\rightarrow$ Pins: `{p['contact']}` ({p['type']})")
                     else:
-                        print(f" [{idx}] Check Unit    : {path['unit']}")
-            print(f"===========================================================================\n")
+                        st.error(f"⚡ **[{idx}] Action Point:** {p['unit']}")
+            os.unlink(tmp_path)
+    except ImportError:
+        # Fallback for PC command prompt
+        print("[INFO] Streamlit not detected. Executing in CLI Mode.")
