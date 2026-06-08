@@ -1,9 +1,10 @@
+
 import os
 import sys
 import pandas as pd
 
 # ==============================================================================
-# 1. CORE UFSBI CABINET RELAY MAPPING (Pure Data Logger Input Parameters)
+# 1. REAL-WORLD DOUBLE LINE & SINGLE LINE UFSBI RELAY MATRIX (S&T Wiring Standard)
 # ==============================================================================
 RELAY_DB = {
     "LINK_FAIL": {
@@ -11,59 +12,58 @@ RELAY_DB = {
         "probable_cause": "🚨 CRITICAL LINK FAILURE! OFC Cable Core Cut, High Line Attenuation (>30dB), or Deltron Rx/Tx Card failure.",
         "feed_path": [
             {"unit": "Go to Deltron Cabinet CPU Card: Check if 'LINK FAIL' LED or Error Code 33 is flashing."},
-            {"unit": "Go to OFC MUX / Quad Cable Termination Box: Measure optical power dB loss."},
-            {"unit": "Verify adjacent station's UFSBI is not completely powered OFF."}
+            {"unit": "Go to OFC MUX / Quad Cable Termination Box: Measure optical power dB loss with Optical Power Meter."},
+            {"unit": "Verify adjacent station's UFSBI is not completely powered OFF / Fuse Blown."}
         ]
     },
     "POWER_FAIL": {
         "function": "UFSBI Internal Vital Power Proving (BIPR1/BIPR2 Drop)",
         "probable_cause": "⚡ CABINET POWER SUPPLY FAULT! Main 24V DC input dropped below operational limits (<21.6V) or DC-DC Converter blown.",
         "feed_path": [
-            {"unit": "Go to Deltron Cabinet TB-1 (Terminal Block): Measure Voltage across Pins 5 & 6 (BIPR1) and Pins 7 & 8 (BIPR2)."},
-            {"unit": "Check Sub-Rack Power Supply Module Module Card-1 & Card-2 status LEDs."},
+            {"unit": "Go to Deltron Cabinet TB-1: Measure Voltage across Pins 5 & 6 (BIPR1) and Pins 7 & 8 (BIPR2)."},
+            {"unit": "Check Sub-Rack Power Supply Module Card-1 & Card-2 status LEDs."},
             {"unit": "Check 2A/4A Glass Fuse on the power distribution panel."}
         ]
     },
-    "TGTNR": {
-        "function": "Train Going To Normal Relay",
-        "probable_cause": "🔑 BLOCK OPERATION BLOCKED / KEY ISSUE! Block Instrument is not in 'Line Closed' state, or local LCB Key/SM Key contact is open.",
+    "LCZR": {
+        "function": "Line Closed Proving Relay (Double Line Normal State Lock)",
+        "probable_cause": "🔒 BLOCK SECTION NOT CLOSED! Block Instrument is still in TOL (Train on Line) or Line Clear condition, or BPAC Axle Counter failed to reset.",
         "feed_path": [
-            {"relay": "LCZR (Line Closed Proving Relay)", "contact": "C3 & C4", "type": "Back Contacts"},
+            {"relay": "AZTR (BPAC Axle Counter Proving Relay)", "contact": "A1 & A2", "type": "Front Contacts"},
             {"relay": "SM_PANEL_KEY_SWITCH", "contact": "Band-1 & Band-2", "type": "Physical Key Contacts"},
-            {"unit": "Go to SM Panel Board Jumper Grid Row-A: Verify Fuse No. F1 (Pnl) is intact."}
+            {"unit": "Go to Axle Counter Reset Box: Check if Preparatory Reset is required to normalize section."}
         ]
     },
-    "BPNR": {
-        "function": "Block Button Proving Normal Relay",
-        "probable_cause": "🔘 BUTTON STUCK FAULT! Bell Plunger, TGB, or TCB button is physically stuck in pressed position or carboned.",
+    "LSSPR": {
+        "function": "Last Stop Signal Proving Relay (Advanced Starter Interlocking)",
+        "probable_cause": "🚫 LSS SIGNAL CLEARANCE FAULT! Last Stop Signal knob is not reversed, or Advanced Starter track circuit is DOWN/Chattering.",
         "feed_path": [
-            {"relay": "BELL_PLUNGER / PUSH_BUTTON", "contact": "Back-Band contacts", "type": "Normally Closed Switch"},
-            {"unit": "Go to SM Panel Jumper Grid Row-B: Check Pin 3 for short circuit / terminal shorting."}
+            {"relay": "LSS_GN_CR (Signal Knob Proving)", "contact": "A3 & A4", "type": "Front Contacts"},
+            {"relay": "LSS_FVT_R (First Vehicle Track Relay)", "contact": "C1 & C2", "type": "Front Contacts"},
+            {"unit": "Go to Relay Rack No. 2, CTB Board: Measure voltage at Terminal Pin 15 to verify LSS circuit continuity."}
         ]
     },
-    "TGTR": {
-        "function": "Train Going To Control Relay (Line Clear Granted Lock)",
-        "probable_cause": "❌ LINE CLEAR INITIATION FAIL! Circuit discontinuity in handshake parameters or open contact in local initiation loop.",
+    "TOLR": {
+        "function": "Train On Line Relay (Block Occupation Latch)",
+        "probable_cause": "⚠️ TOL LATCHING FAULT! Train entered the section but TOLR failed to pick up locally, or sequential entry tracks failed to drop.",
         "feed_path": [
-            {"relay": "TGTXR", "contact": "A4 & A5", "type": "Front Contacts"},
-            {"relay": "BPNR", "contact": "C1 & C2", "type": "Front Contacts"},
-            {"unit": "Go to TGTR Relay Q-Style Base: Check Coil Terminals for loose wire or dry solder."}
+            {"relay": "LSS_FVT_R (First Vehicle Track)", "contact": "A1 & A2", "type": "Back Contacts (Vehicle Entry Proving)"},
+            {"unit": "Go to Double Line Block Rack: Check TOL Latch Relay Coil Block for mechanical stuck or burnt coil."}
         ]
     },
-    "TCFR": {
-        "function": "Train Coming From Control Relay (Line Clear Received)",
-        "expected_after": "TGTR",
-        "probable_cause": "📡 HANDSHAKE RESPONSE FAILURE! Local cabinet received the demand but failed to latch due to internal relay dependency drop.",
+    "BLR": {
+        "function": "Block Lock Relay (Final Authorization Circuit)",
+        "probable_cause": "❌ BLOCK LOCK RELEASE FAIL! Inter-station commutation handshake unfulfilled or lock magnet coil open circuit.",
         "feed_path": [
-            {"relay": "BIPR1", "contact": "A4 & A5", "type": "Front Contacts"},
-            {"relay": "BIPR2", "contact": "D1 & D2", "type": "Front Contacts"},
-            {"relay": "TGTR", "contact": "B3 & B4", "type": "Front Contacts"}
+            {"relay": "BIPR1", "contact": "B1 & B2", "type": "Front Contacts"},
+            {"relay": "BIPR2", "contact": "C3 & C4", "type": "Front Contacts"},
+            {"unit": "Go to Instrument Base Binding Posts: Test Pins 3A & 3B for 24V DC Lock Pulse."}
         ]
     }
 }
 
-# Criss-Cross Execution Sequence
-CRITICAL_CHECKPOINTS = ["BIPR1", "BIPR2", "TGTNR", "BPNR", "TGTR", "TCFR"]
+# Double Line & Single Line Cross-Check Points
+CRITICAL_CHECKPOINTS = ["BIPR1", "BIPR2", "LCZR", "LSSPR", "TOLR", "BLR"]
 
 class RealWorldUFSBIAnalyzer:
     def sanitize_relay_name(self, cell_value):
@@ -88,7 +88,7 @@ class RealWorldUFSBIAnalyzer:
             if not relay_col: relay_col = df.columns[1]
             if not status_col: status_col = df.columns[2]
             
-            # Sort chronologically by time to read state immediately BEFORE failure
+            # Smart Chronological Sorting immediately before failure
             df = df.dropna(subset=[time_col, relay_col, status_col])
             df[time_col] = pd.to_datetime(df[time_col], errors='coerce')
             df = df.sort_values(by=time_col).reset_index(drop=True)
@@ -108,9 +108,9 @@ class RealWorldUFSBIAnalyzer:
 
     def analyze_sequence(self, events):
         if not events:
-            return {"status": "NO_DATA", "message": "Zero UFSBI data points found in data logger sheet."}
+            return {"status": "NO_DATA", "message": "Zero active UFSBI data points found in data logger sheet."}
 
-        # Extract latest states of vital relays
+        # Setup latest state configurations
         states = {r: "DOWN" for r in CRITICAL_CHECKPOINTS}
         for e in events:
             if any(x in e['status'] for x in ['ON', 'PICK', 'UP', '1', 'REVERS']):
@@ -119,13 +119,12 @@ class RealWorldUFSBIAnalyzer:
                 states[e['relay']] = "DOWN"
 
         # ----------------==================================================
-        # PRIORITY GATE 1: CHECK LINK AND SYSTEM POWER FIRST (BIPR1 & BIPR2)
+        # PRIORITY GATE 1: CRITICAL LINK AND POWER SCAN (BIPR1 & BIPR2)
         # ----------------==================================================
         if states["BIPR1"] == "DOWN" and states["BIPR2"] == "DOWN":
             return {
                 "status": "FAILURE",
-                "missing_relay": "LINK FAILURE / LINE INTERREUPTION",
-                "type": "LINK",
+                "missing_relay": "LINK FAILURE / LINE INTERRUPTION",
                 "root_cause_details": RELAY_DB["LINK_FAIL"]
             }
         
@@ -133,56 +132,51 @@ class RealWorldUFSBIAnalyzer:
             return {
                 "status": "FAILURE",
                 "missing_relay": "BIPR1 / BIPR2 (Power Input Drop)",
-                "type": "POWER",
                 "root_cause_details": RELAY_DB["POWER_FAIL"]
             }
 
         # ----------------==================================================
-        # PRIORITY GATE 2: CHECK KEYS AND BUTTONS ONLY IF LINK/POWER IS OK
+        # PRIORITY GATE 2: DOUBLE LINE OPERATION SCAN (LCZR / LSSPR / TOLR)
         # ----------------==================================================
-        if states["TGTNR"] == "DOWN":
+        if states["LCZR"] == "DOWN":
             return {
                 "status": "FAILURE",
-                "missing_relay": "TGTNR",
-                "type": "OPERATION",
-                "root_cause_details": RELAY_DB["TGTNR"]
+                "missing_relay": "LCZR (Line Closed Lock Open)",
+                "root_cause_details": RELAY_DB["LCZR"]
             }
 
-        if states["BPNR"] == "DOWN":
+        if states["LSSPR"] == "DOWN":
             return {
                 "status": "FAILURE",
-                "missing_relay": "BPNR",
-                "type": "OPERATION",
-                "root_cause_details": RELAY_DB["BPNR"]
+                "missing_relay": "LSSPR (Last Stop Signal Proving Circuit)",
+                "root_cause_details": RELAY_DB["LSSPR"]
             }
 
-        if states["TGTR"] == "DOWN":
+        if states["TOLR"] == "DOWN":
             return {
                 "status": "FAILURE",
-                "missing_relay": "TGTR",
-                "type": "OPERATION",
-                "root_cause_details": RELAY_DB["TGTR"]
+                "missing_relay": "TOLR (Train On Line Circuit Fault)",
+                "root_cause_details": RELAY_DB["TOLR"]
             }
 
-        if states["TCFR"] == "DOWN":
+        if states["BLR"] == "DOWN":
             return {
                 "status": "FAILURE",
-                "missing_relay": "TCFR",
-                "type": "OPERATION",
-                "root_cause_details": RELAY_DB["TCFR"]
+                "missing_relay": "BLR (Block Lock Release Fault)",
+                "root_cause_details": RELAY_DB["BLR"]
             }
 
-        return {"status": "HEALTHY", "message": "All monitored UFSBI cabinet circuits working in perfect parameters."}
+        return {"status": "HEALTHY", "message": "All monitored Double/Single Line UFSBI circuits working within safe parameters."}
 
 # ==============================================================================
-# 5. UNIVERSAL Streamlit Android UI & PC CLI Framework
+# 5. UNIVERSAL Streamlit Android UI & PC CLI Framework Gateway
 # ==============================================================================
 if __name__ == "__main__":
     analyzer = RealWorldUFSBIAnalyzer()
     try:
         import streamlit as st
         st.set_page_config(page_title="UFSBI Diagnostic Engine", layout="wide")
-        st.markdown("## 📡 Advanced UFSBI Diagnostic Engine (Priority-Scan Mode)")
+        st.markdown("## 📡 Advanced UFSBI Universal Diagnostic Engine")
         st.markdown("### **S&T Department — Northeast Frontier Railway**")
         st.markdown("---")
         
@@ -214,5 +208,5 @@ if __name__ == "__main__":
                         st.error(f"⚡ **[{idx}] Action Point:** {p['unit']}")
             os.unlink(tmp_path)
     except ImportError:
-        # Fallback for PC command prompt
-        print("[INFO] Streamlit not detected. Executing in CLI Mode.")
+        # Fallback local command prompt compatibility
+        print("[INFO] Executing in local PC CLI Mode.")
